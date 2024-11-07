@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+spec:
+  revisionHistoryLimit: 12
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      imagePullSecrets:
+      - name: frontend-secret
+      containers:
+        - name: frontend
+          env:
+          - name: VUE_APP_API_URL
+            value: "http://backend-service:8081"
+          image: gitlab.praktikum-services.ru:5050/std-ext-004-43/momo-store/momo-store-frontend
+          ports:
+            - containerPort: 80
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "250Mi"
+              cpu: "100m"
+            limits:
+              memory: "450Mi"
+              cpu: "500m"
+          startupProbe:
+            httpGet:
+              port: 80
+              path: /
+            failureThreshold: 20
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              port: 80
+              path: /
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/conf.d/
+      volumes:
+        - name: config
+          configMap:
+            name: frontend-configmap

@@ -1,0 +1,22 @@
+stages:
+  - multi-project deploy
+
+deploy backend:
+  stage: multi-project deploy
+  trigger: 
+    include: 
+      - local: kubernetes/momo-backend/.gitlab-ci.yml
+    strategy: depend
+  only:
+    changes: 
+      - kubernetes/momo-backend/**/*
+
+deploy frontend:
+  stage: multi-project deploy
+  trigger: 
+    include: 
+      - local: kubernetes/momo-frontend/.gitlab-ci.yml
+    strategy: depend
+  only:
+    changes: 
+      - kubernetes/momo-frontend/**/*

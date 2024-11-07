@@ -1,0 +1,9 @@
+.terraform
+*.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars.*
+*.tfvars.json
+crash.log
+crash.*.log
+errored.tfstate

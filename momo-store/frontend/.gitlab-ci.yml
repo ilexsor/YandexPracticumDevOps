@@ -1,0 +1,86 @@
+variables:
+  VERSION: 0.0.${CI_PIPELINE_ID}
+
+# List stages
+stages:
+  - build
+  - test
+  - release
+#  - deploy
+  - notify
+
+# Build  frontend job
+build-frontend-code-job:
+  stage: build  
+  only:
+    changes:
+    - frontend/*
+  script:        
+    - cd frontend
+    - ls -al
+    - npm install
+    - npm run build
+    - ls -al
+  artifacts:
+    paths:
+      - frontend/dist
+      
+# Build for gitlab registry
+build for gitlab registry:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.14.0-debug
+    entrypoint: [""]
+  script:
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}/frontend"
+      --dockerfile "${CI_PROJECT_DIR}/frontend/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/momo-store-frontend:$CI_COMMIT_SHA"
+      --build-arg VERSION=$VERSION
+      --cache=true
+
+# Add image to gitlab registry
+release to gillab:
+  variables:
+    GIT_STRATEGY: none
+  image:
+    name: gcr.io/go-containerregistry/crane:debug
+    entrypoint: [ "" ]
+  cache: [ ]
+  stage: release
+  before_script:
+    - crane auth login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - crane tag $CI_REGISTRY_IMAGE/momo-store-frontend:$CI_COMMIT_SHA latest
+
+# Check sast code 
+sonarqube-frontend-sast:
+  stage: test
+  image: sonarsource/sonar-scanner-cli
+  script: sonar-scanner -Dsonar.projectKey=${SONAR_PROJECT_KEY_FRONT} -Dsonar.sources=. -Dsonar.host.url=${SONARQUBE_URL} -Dsonar.login=${SONAR_LOGIN}
+  needs:
+    - build-frontend-code-job
+
+# Send piplene notify
+telegram-notification-frontend:
+  stage: notify
+  only:
+    changes:
+    - frontend/*
+    variables:
+      - $CI_COMMIT_MESSAGE =~ /send notification/
+  script:
+    - curl -s -X POST https://api.telegram.org/bot${BOT_TOKEN}/sendMessage -d chat_id=${CHAT_ID} -d parse_mode=markdown -d text="✅ *Autodeploy frontend* ✅ %0A%0AProject - ${CI_PROJECT_NAME} %0A%0ACommit by ${GITLAB_USER_NAME} %0A%0AArtifact"
+  needs:
+    - build-frontend-code-job 
+
+# Upload to nexus
+upload-frontend-release:
+  stage: release
+  needs:
+    - build-frontend-code-job
+  script:
+    - cd frontend
+    - tar czf momo-store-frontend-${VERSION}.tar.gz dist
+    - curl -v -u "${NEXUS_REPO_USER}:${NEXUS_REPO_PASS}" --upload-file momo-store-frontend-${VERSION}.tar.gz ${NEXUS_REPO_URL_FRONTEND}/${NEXUS_REPO_FRONTEND_NAME}/${VERSION}/momo-store-frontend-${VERSION}.tar.gz 
+

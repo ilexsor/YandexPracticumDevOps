@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 20%
+      maxUnavailable: 1
+  revisionHistoryLimit: 12
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8081"
+        prometheus.io/scrape: "true"
+      labels:
+        app: backend
+    spec:
+      imagePullSecrets:
+      - name: backend-secret
+      containers:
+        - name: backend
+          image: gitlab.praktikum-services.ru:5050/std-ext-004-43/momo-store/momo-store-backend
+          ports:
+            - containerPort: 8081
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "250Mi"
+              cpu: "100m"
+            limits:
+              memory: "450Mi"
+              cpu: "500m"
+          startupProbe:
+            httpGet:
+              port: 8081
+              path: /health
+            failureThreshold: 20
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+                port: 8081
+                path: /health
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3

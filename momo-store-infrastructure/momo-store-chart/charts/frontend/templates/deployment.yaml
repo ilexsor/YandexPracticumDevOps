@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: momo-store-frontend
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: momo-store
+    env: {{ .Values.environment }}
+  name: frontend-deployment
+spec:
+  revisionHistoryLimit: {{ .Values.frontend.revisionHistoryLimit }}
+  replicas: {{ .Values.frontend.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.frontend.label }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.frontend.label }}
+    spec:
+      imagePullSecrets:
+      - name: frontend-secret
+      containers:
+        - name: {{ .Values.frontend.label }}
+          image: {{ .Values.frontend.containers.image }}
+          ports:
+            - containerPort: {{ .Values.frontend.containers.port }}
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: {{ .Values.frontend.containers.resources.requests.memory }}
+              cpu: {{ .Values.frontend.containers.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.frontend.containers.resources.limits.memory }}
+              cpu: {{ .Values.frontend.containers.resources.limits.cpu }}
+          startupProbe:
+            httpGet:
+              port: {{ .Values.frontend.containers.port }}
+              path: /
+            failureThreshold: {{ .Values.frontend.containers.startupProbe.failureThreshold }}
+            periodSeconds: {{ .Values.frontend.containers.startupProbe.periodSeconds }}
+          livenessProbe:
+            httpGet:
+              port: {{ .Values.frontend.containers.port }}
+              path: /
+            initialDelaySeconds: {{ .Values.frontend.containers.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.frontend.containers.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.frontend.containers.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.frontend.containers.livenessProbe.failureThreshold }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/conf.d/
+      volumes:
+        - name: config
+          configMap:
+            name: frontend-configmap

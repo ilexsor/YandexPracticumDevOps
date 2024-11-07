@@ -1,0 +1,15 @@
+stages:
+  - deploy
+#
+deploy frontend:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  environment:
+    name: production/frontend
+    url: http://std-ext-004-43.k8s.praktikum-services.tech
+    auto_stop_in: 1h
+  before_script:
+    - echo $KUBECONFIG2 | base64 -d > ./config
+  script:
+    - kubectl --kubeconfig ./config apply -f kubernetes/momo-frontend/configmap.yaml -f kubernetes/momo-frontend/service.yaml -f kubernetes/momo-frontend/ingress.yaml -f kubernetes/momo-frontend/deployment.yaml
+ 

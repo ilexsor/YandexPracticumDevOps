@@ -1,0 +1,45 @@
+environment: production
+frontend:
+  revisionHistoryLimit: 12
+# configmap
+  apiVersion: v1
+# configmap
+
+# deployment
+  replicas: 1
+  label: frontend
+  containers:
+    image: gitlab.praktikum-services.ru:5050/std-ext-004-43/momo-store/momo-store-frontend
+    port: 80
+    resources:
+      requests:
+        memory: "250Mi"
+        cpu: "100m"
+      limits:
+        memory: "450Mi"
+        cpu: "500m"
+    startupProbe:
+      failureThreshold: 20
+      periodSeconds: 5
+    livenessProbe:
+      initialDelaySeconds: 3
+      periodSeconds: 10
+      timeoutSeconds: 2
+      failureThreshold: 3
+# deployment  
+
+# ingress
+  ingress:
+    apiVersion: networking.k8s.io/v1
+# ingress
+
+# secrets
+  metadataSecrets:
+    name: frontend-secret
+    nameEnv: frontend-secret-env
+# secrets
+
+# service
+  metadataService:
+    name: frontend-service
+# service

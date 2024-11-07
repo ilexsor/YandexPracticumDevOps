@@ -1,0 +1,32 @@
+stages:
+  - helm_package
+  - deploy
+
+helm package:
+  stage: helm_package
+  before_script:
+    - curl -L https://get.helm.sh/helm-v3.8.0-linux-amd64.tar.gz -o helm.tar.gz
+    - tar -zxvf helm.tar.gz
+    - mv linux-amd64/helm /usr/local/bin/helm
+  script:
+    - helm package ./momo-store-chart
+    - curl -u ${NEXUS_USER}:${NEXUS_PASS} https://nexus.praktikum-services.tech/repository/momo-store-helm-alex-sorokin-004-43/ --upload-file momo-store-chart-0.0.10.tgz
+  only:
+    changes:
+      - momo-store-chart/**/*
+
+  
+deploy backend:
+  stage: deploy
+  environment:
+    name: production/backend
+  before_script:
+    - echo $KUBECONFIG2 | base64 -d > /tmp/config
+    - cp ./ca.pem /tmp/
+    - curl -L https://get.helm.sh/helm-v3.8.0-linux-amd64.tar.gz -o helm.tar.gz
+    - tar -zxvf helm.tar.gz
+    - mv linux-amd64/helm /usr/local/bin/helm
+  script:
+    - helm repo add nexus https://nexus.praktikum-services.tech/repository/momo-store-helm-alex-sorokin-004-43/ --username ${NEXUS_USER} --password ${NEXUS_PASS}
+    - helm repo update
+    - helm --kubeconfig=/tmp/config upgrade --install momo-store --atomic --timeout 15m nexus/momo-store-chart

@@ -1,0 +1,126 @@
+# Variables
+variables:
+  VERSION: 0.0.${CI_PIPELINE_ID}
+
+# Stages priority
+stages:
+  - build
+  - test
+  - release
+  - deploy
+  - notify
+
+# Test go app
+test-backend-code:
+  image: golang:1.17
+  stage: build  
+  script:
+    - cd backend
+    - go mod tidy
+    - go test -v ./...
+
+
+# Build backend job
+build-backend-code-job:
+  image: golang:1.17
+  stage: build  
+  script:
+    - cd backend
+    - go mod tidy
+    - go build -o momo-store-backend-${VERSION} ./cmd/api
+  cache:
+    paths:
+      - backend/momo-store-backend-${VERSION}
+  artifacts:
+    paths:
+      - backend/momo-store-backend-${VERSION}
+  needs:
+    - test-backend-code
+
+# Upload to nexus
+upload-backend-to-nexus:
+  stage: release
+  needs:
+    - build-backend-code-job
+  script:
+    - cd backend
+    - curl -v -u "${NEXUS_REPO_USER}:${NEXUS_REPO_PASS}" --upload-file momo-store-backend-${VERSION} ${NEXUS_REPO_URL_BACKEND}/${NEXUS_REPO_BACKEND_NAME}/${VERSION}/momo-store-backend-${VERSION}
+
+# Build for gitlab registry
+build for gitlab registry:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.14.0-debug
+    entrypoint: [""]
+  script:
+    - echo "test"
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}/backend"
+      --dockerfile "${CI_PROJECT_DIR}/backend/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/momo-store-backend:$CI_COMMIT_SHA"
+      --build-arg VERSION=$VERSION
+      --cache=true
+  needs:
+    - build-backend-code-job
+
+# Add image to gitlab registry
+release to gillab:
+  variables:
+    GIT_STRATEGY: none
+  image:
+    name: gcr.io/go-containerregistry/crane:debug
+    entrypoint: [ "" ]
+  cache: [ ]
+  stage: release
+  before_script:
+    - crane auth login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - crane tag $CI_REGISTRY_IMAGE/momo-store-backend:$CI_COMMIT_SHA latest
+
+# Check sast code 
+sonarqube-backend-sast:
+   stage: test
+   image: sonarsource/sonar-scanner-cli
+   script: sonar-scanner -Dsonar.projectKey=${SONAR_PROJECT_KEY_BACK} -Dsonar.sources=. -Dsonar.host.url=${SONARQUBE_URL} -Dsonar.login=${SONAR_LOGIN_BACK}
+   needs:
+     - build-backend-code-job
+
+deploy-backend:
+  stage: deploy
+  image: docker:24.0.7-alpine3.19
+  environment:
+    name: production/backend
+  before_script:
+    - set -x
+    - apk add docker-cli-compose openssh-client
+    - apk add openssh-client bash
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts   
+    - docker context create remote --description "remote ssh" --docker "host=ssh://${DEV_USER}@${DEV_HOST}"
+    - docker --context remote stop -f momo-store-backend || true
+    - docker --context remote rm -f momo-store-backend || true
+    - docker --context remote rmi -f ${CI_REGISTRY_IMAGE}/momo-store-backend || true
+  script:
+    #- ssh ${DEV_USER}@${DEV_HOST} "export 'CI_REGISTRY_IMAGE=${CI_REGISTRY_IMAGE}'; export 'CI_REGISTRY_USER=${CI_REGISTRY_USER}'; export 'CI_REGISTRY_PASSWORD=${CI_REGISTRY_PASSWORD}'; export 'CI_REGISTRY=${CI_REGISTRY}'; setsid /bin/bash -s " < ./blue-green-deploy.sh
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker --context remote compose up backend -d --pull "always" --force-recreate
+  rules:
+    - when: manual
+
+
+# Send piplene notify
+telegram-notification-backend:
+  stage: notify
+  only:
+    changes:
+      - backend/*
+    variables:
+      - $CI_COMMIT_MESSAGE =~ /send notification/
+  script: 
+    - curl -s -X POST https://api.telegram.org/bot${BOT_TOKEN}/sendMessage -d chat_id=${CHAT_ID} -d parse_mode=markdown -d text="✅ *Autodeploy backend* ✅ %0A%0AProject - ${CI_PROJECT_NAME} %0A%0ACommit by ${GITLAB_USER_NAME} %0A%0AArtifact"
+  needs:
+    - build-backend-code-job

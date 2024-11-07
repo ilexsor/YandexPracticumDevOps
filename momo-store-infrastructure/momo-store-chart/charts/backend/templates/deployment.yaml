@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: momo-store-backend
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: momo-store
+    env: {{ .Values.environment }}
+  name: {{ .Values.backend.metadata.name}}
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.backend.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.backend.rollingUpdate.maxUnavailable }}
+  revisionHistoryLimit: {{ .Values.backend.revisionHistoryLimit }}
+  replicas: {{ .Values.backend.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.backend.label }}
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8081"
+        prometheus.io/scrape: "true"
+      labels:
+        app: {{ .Values.backend.label }}
+    spec:
+      imagePullSecrets:
+      - name: backend-secret
+      containers:
+        - name: {{ .Values.backend.label }}
+          image: {{ .Values.backend.containers.image }}
+          ports:
+            - containerPort: {{ .Values.backend.containers.port }}
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: {{ .Values.backend.containers.resources.requests.memory }}
+              cpu: {{ .Values.backend.containers.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.backend.containers.resources.limits.memory }}
+              cpu: {{ .Values.backend.containers.resources.limits.cpu }}
+          startupProbe:
+            httpGet:
+              port: {{ .Values.backend.containers.port }}
+              path: /health
+            failureThreshold: {{ .Values.backend.containers.startupProbe.failureThreshold }}
+            periodSeconds: {{ .Values.backend.containers.startupProbe.periodSeconds }}
+          livenessProbe:
+            httpGet:
+                port: {{ .Values.backend.containers.port }}
+                path: /health
+            initialDelaySeconds: {{ .Values.backend.containers.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.backend.containers.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.backend.containers.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.backend.containers.livenessProbe.failureThreshold }}

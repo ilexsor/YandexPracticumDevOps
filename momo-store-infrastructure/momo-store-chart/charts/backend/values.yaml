@@ -1,0 +1,51 @@
+environment: production
+
+backend:
+# deployment
+  metadata:
+    name: backend-deployment
+  rollingUpdate:
+      maxSurge: 20%
+      maxUnavailable: 1
+  revisionHistoryLimit: 12
+  replicas: 1
+  label: backend
+  containers:
+    image: gitlab.praktikum-services.ru:5050/std-ext-004-43/momo-store/momo-store-backend
+    port: 8081
+    resources:
+      requests:
+        memory: "250Mi"
+        cpu: "100m"
+      limits:
+        memory: "450Mi"
+        cpu: "500m"
+    startupProbe:
+      failureThreshold: 20
+      periodSeconds: 5
+    livenessProbe:
+      initialDelaySeconds: 3
+      periodSeconds: 10
+      timeoutSeconds: 2
+      failureThreshold: 3
+# deployment
+
+# backend-vpa
+  containerPolicies:
+    minAllowed:
+      cpu: 100m
+      memory: 250Mi
+    maxAllowed:
+      cpu: 500m
+      memory: 500Mi
+# backend-vpa
+
+# secrets
+  secretApiVersion: v1
+  secretNameEnv: backend-secret-env
+  secretName: backend-secret
+# secrets
+
+# service
+  serviceName: backend-service
+# service
